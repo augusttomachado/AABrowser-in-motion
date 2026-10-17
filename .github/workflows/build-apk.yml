@@ -20,23 +20,33 @@ jobs:
           path: source
           fetch-depth: 1
 
-      - name: Apply in-motion configuration
+      - name: Configure Android Auto manifest
         working-directory: source
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           manifest = Path('app/src/main/AndroidManifest.xml')
           s = manifest.read_text()
 
-          # Keep the original Android Auto integration intact, but use the
-          # requested productivity app category.
-          s = s.replace('android:appCategory="game"', 'android:appCategory="productivity"')
+          # Keep the original AABrowser integration. Android Auto currently
+          # supports Games as its parked-app category; motion is then handled
+          # by the host rather than bypassed by the app.
+          s = s.replace('android:appCategory="game"', 'android:appCategory="game"')
 
-          # Parked apps must not advertise distractionOptimized. Android Auto
-          # then applies its own parked-app blocking when the vehicle moves.
-          import re
-          s = re.sub(r'\n\s*<meta-data\s+android:name="distractionOptimized"\s+android:value="true"\s*/>', '', s)
+          # Identify the app as a browser as well as a car-launchable app.
+          marker = '<category android:name="android.intent.category.LAUNCHER" />'
+          browser = '<category android:name="android.intent.category.APP_BROWSER" />'
+          if browser not in s:
+              s = s.replace(marker, marker + '\n                ' + browser, 1)
+
+          # Do not advertise distractionOptimized on a parked-app activity.
+          s = re.sub(
+              r'\n\s*<meta-data\s+android:name="distractionOptimized"\s+android:value="true"\s*/>',
+              '',
+              s,
+          )
 
           manifest.write_text(s)
           PY
