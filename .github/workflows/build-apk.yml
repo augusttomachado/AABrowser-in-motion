@@ -10,15 +10,36 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout build files
+      - name: Checkout build workflow
         uses: actions/checkout@v4
 
-      - name: Checkout AABrowser-in-motion source
+      - name: Checkout original AABrowser
         uses: actions/checkout@v4
         with:
-          repository: rafzei/AABrowser-in-motion
+          repository: kododake/AABrowser
           path: source
           fetch-depth: 1
+
+      - name: Apply in-motion configuration
+        working-directory: source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = Path('app/src/main/AndroidManifest.xml')
+          s = manifest.read_text()
+
+          # Keep the original Android Auto integration intact, but use the
+          # requested productivity app category.
+          s = s.replace('android:appCategory="game"', 'android:appCategory="productivity"')
+
+          # Parked apps must not advertise distractionOptimized. Android Auto
+          # then applies its own parked-app blocking when the vehicle moves.
+          import re
+          s = re.sub(r'\n\s*<meta-data\s+android:name="distractionOptimized"\s+android:value="true"\s*/>', '', s)
+
+          manifest.write_text(s)
+          PY
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -47,7 +68,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AABrowser-in-motion-debug
-          path: |
-            source/app/build/outputs/apk/debug/*.apk
-            source/app/build/outputs/renamedApks/debug/*.apk
+          path: source/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
